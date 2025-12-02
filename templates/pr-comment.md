@@ -1,0 +1,11 @@
+<!-- templates/pr-comment.md -->
+### $TITLE
+
+Autor: @$ACTOR  
+Assunto: $SUBJECT
+
+$BODY_MESSAGE
+
+$BODY_SCOPE_BLOCK
+$BODY_TODO_BLOCK
+$FOOTER_BLOCK
