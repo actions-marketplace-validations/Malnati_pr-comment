@@ -1,33 +1,19 @@
-<h2>${TITLE}</h2>
+${TITLE}
 
-<table width="100%">
-  <tr>
-    <td>
-      <small>👤 Initiator</small><br>
-      <b>@${ACTOR}</b>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <small>🏷️ Subject</small><br>
-      <code>${SUBJECT}</code>
-    </td>
-  </tr>
-</table>
+---
 
-<br>
+<small>👤 Initiator</small>@${ACTOR}
+<small>🏷️ Subject</small>${SUBJECT}
+
+---
 
 ${BODY_MESSAGE}
-
-<br>
 
 ${BODY_SCOPE_BLOCK}
 
 ${BODY_TODO_BLOCK}
 
 ${FOOTER_BLOCK}
-
-<br>
 
 <hr>
 <div align="right">
