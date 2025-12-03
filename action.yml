@@ -41,7 +41,11 @@ inputs:
     description: "Advice / next steps"
     required: false
     default: ""
-
+  template_path:
+    description: "Caminho relativo para um template Markdown personalizado"
+    required: false
+    default: ""
+    
 outputs:
   comment_body:
     description: "Final comment body in Markdown"
@@ -125,6 +129,77 @@ runs:
         {
           echo "block<<EOF"
           echo "$FORMATTED"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # STEP 3.5: Validar Template Personalizado (NOVO)
+    # Responsabilidade: Checar placeholders e definir qual arquivo usar
+    # ------------------------------------------------------------------
+    - id: check_template
+      shell: bash
+      env:
+        CUSTOM_PATH: ${{ inputs.template_path }}
+        DEFAULT_PATH: ${{ github.action_path }}/templates/pr-comment.md
+      run: |
+        set -euo pipefail
+
+        # Variáveis obrigatórias para o envsubst (formato $NOME)
+        REQUIRED_VARS=("ACTOR" "SUBJECT" "BODY_MESSAGE" "BODY_SCOPE_BLOCK" "BODY_TODO_BLOCK" "FOOTER_BLOCK")
+        
+        FINAL_TEMPLATE="$DEFAULT_PATH"
+        WARNING_MD=""
+
+        # Se não foi passado template customizado, segue o baile com o padrão
+        if [ -z "$CUSTOM_PATH" ]; then
+          echo "No custom template provided. Using default."
+        
+        # Se foi passado, mas arquivo não existe
+        elif [ ! -f "$CUSTOM_PATH" ]; then
+          echo "::error::Custom template not found at '$CUSTOM_PATH'. Falling back to default."
+          FINAL_TEMPLATE="$DEFAULT_PATH"
+          WARNING_MD=$'\n\n> [!WARNING]\n> **Action Setup Warning**: O template personalizado informado não foi encontrado. O template padrão foi utilizado.'
+
+        # Se arquivo existe, validar placeholders
+        else
+          echo "Validating custom template: $CUSTOM_PATH"
+          MISSING=()
+          PRESENT=()
+
+          for VAR in "${REQUIRED_VARS[@]}"; do
+            # Grep procura pela string literal $VAR (ex: $ACTOR)
+            if grep -Fq "\${$VAR}" "$CUSTOM_PATH" || grep -Fq "\$$VAR" "$CUSTOM_PATH"; then
+              PRESENT+=("$VAR")
+            else
+              MISSING+=("$VAR")
+            fi
+          done
+
+          # Se houver itens faltando
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            # Junta arrays em strings para o log
+            MISSING_STR=$(IFS=', '; echo "${MISSING[*]}")
+            PRESENT_STR=$(IFS=', '; echo "${PRESENT[*]}")
+
+            echo "::error::Template Validation Failed! The following placeholders are missing: [$MISSING_STR]. Present: [$PRESENT_STR]. Falling back to default."
+            
+            FINAL_TEMPLATE="$DEFAULT_PATH"
+            WARNING_MD=$'\n\n> [!WARNING]\n> **Action Setup Warning**: O template personalizado falhou na validação.\n> **Ausentes:** `'"$MISSING_STR"'`\n> Verifique os logs da Action para corrigir e tentar novamente.'
+          else
+            echo "Template validation passed!"
+            FINAL_TEMPLATE="$CUSTOM_PATH"
+          fi
+        fi
+
+        echo "Selected template: $FINAL_TEMPLATE"
+
+        # Outputs para o próximo step
+        echo "template_file=$FINAL_TEMPLATE" >> "$GITHUB_OUTPUT"
+        
+        # Multiline para o aviso
+        {
+          echo "warning_msg<<EOF"
+          echo "$WARNING_MD"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
