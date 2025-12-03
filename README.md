@@ -45,6 +45,7 @@ $FOOTER_BLOCK
 No seu arquivo .github/workflows/pr-comment.yml, você precisa adicionar o actions/checkout (se ainda não tiver) e o parâmetro template_path.
 
 ```yaml
+# .github/workflows/pr-comment.yml
 name: "Example PR comment"
 
 on:
@@ -62,17 +63,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Sua Action chamando o template
+      # 2. Sua Action chamando o template padrão
       - name: Post PR comment
-        uses: Malnati/pr-comment@v4.0.1
+        uses: Malnati/pr-comment@v4.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           pr_number: ${{ github.event.pull_request.number }}
           header_actor: ${{ github.actor }}
-          header_title: "🔁 auto-sync"
-          header_subject: "Sincronização de branches"
+          header_title: "🧪 Testing default PR message"
+          header_subject: "Hearder de teste"
           body_message: |
-            Este é um teste usando um **arquivo Markdown local** como template.
+            Este é um teste usando um **arquivo Markdown local** como template padrão.
+          body_scope: |
+            - base: `${{ github.event.pull_request.base.ref }}`
+            - head: `${{ github.event.pull_request.head.ref }}`
+          body_todo: |
+            - Validar se o layout mudou.
+          footer_result: "Template carregado com sucesso."
+          footer_advise: "Nenhuma ação requerida."
+
+      # 2. Sua Action chamando o template custom
+      - name: Post PR comment
+        uses: Malnati/pr-comment@v4.0.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          header_actor: ${{ github.actor }}
+          header_title: "🧪 Testing custom PR message"
+          header_subject: "Hearder de teste"
+          body_message: |
+            Este é um teste usando um **arquivo Markdown local** como template personalizado.
           body_scope: |
             - base: `${{ github.event.pull_request.base.ref }}`
             - head: `${{ github.event.pull_request.head.ref }}`
