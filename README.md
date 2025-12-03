@@ -5,18 +5,66 @@ Action para publicar comentários padronizados em Pull Requests usando um templa
 
 ## Uso rápido
 
+### Passo 1: Criar o arquivo de template
+
+Crie um arquivo no seu repositório de testes (ex: .github/templates/custom.md) com o conteúdo abaixo. Fiz um design diferente do padrão para você notar a mudança visualmente:
+
+```markdown
+# 🎨 Check Automático (Customizado)
+
+**Iniciado por:** @$ACTOR
+**Assunto:** $SUBJECT
+
+---
+
+### 📝 Mensagem Principal
+$BODY_MESSAGE
+
+---
+
+<details open>
+<summary>🔍 Detalhes do Escopo</summary>
+
+$BODY_SCOPE_BLOCK
+</details>
+
+<details>
+<summary>📋 Pendências</summary>
+
+$BODY_TODO_BLOCK
+</details>
+
+---
+$FOOTER_BLOCK
+
+###### *Gerado via Template Personalizado v1.0*
+```
+
+### Passo 2: Ajustar o Workflow
+
+No seu arquivo .github/workflows/pr-comment.yml, você precisa adicionar o actions/checkout (se ainda não tiver) e o parâmetro template_path.
+
 ```yaml
 name: "Example PR comment"
 
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   comment:
     runs-on: ubuntu-latest
     steps:
+      # 1. IMPORTANTE: Checkout é obrigatório para ler o arquivo local
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Sua Action chamando o template
       - name: Post PR comment
-        uses: Malnati/pr-comment@v2
+        uses: Malnati/pr-comment@v4.0.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           pr_number: ${{ github.event.pull_request.number }}
@@ -24,14 +72,17 @@ jobs:
           header_title: "🔁 auto-sync"
           header_subject: "Sincronização de branches"
           body_message: |
-            Resultado da sincronização automática entre branches.
+            Este é um teste usando um **arquivo Markdown local** como template.
           body_scope: |
             - base: `${{ github.event.pull_request.base.ref }}`
             - head: `${{ github.event.pull_request.head.ref }}`
           body_todo: |
-            - Revisar conflitos (se houver).
-          footer_result: "Sincronização concluída."
-          footer_advise: "Verifique o diff antes de fazer o merge."
+            - Validar se o layout mudou.
+          footer_result: "Template carregado com sucesso."
+          footer_advise: "Nenhuma ação requerida."
+          
+          # 3. Caminho relativo à raiz do repositório
+          template_path: ".github/templates/custom.md"
 ```
 
 ## Inputs
