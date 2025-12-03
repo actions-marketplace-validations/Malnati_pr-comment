@@ -13,7 +13,6 @@ inputs:
   pr_number:
     description: "Pull Request number to comment on"
     required: true
-
   header_actor:
     description: "Message author (e.g., github.actor)"
     required: true
@@ -23,7 +22,6 @@ inputs:
   header_subject:
     description: "Comment subject"
     required: true
-
   body_message:
     description: "Main message body (Markdown)"
     required: true
@@ -35,7 +33,6 @@ inputs:
     description: "TODO / pending actions (Markdown list)"
     required: false
     default: ""
-
   footer_result:
     description: "Result summary"
     required: false
@@ -48,69 +45,174 @@ inputs:
 outputs:
   comment_body:
     description: "Final comment body in Markdown"
-    value: ${{ steps.build-message.outputs.comment_body }}
+    value: ${{ steps.assemble_markdown.outputs.markdown }}
 
 runs:
   using: "composite"
   steps:
-    - id: build-message
+    # ------------------------------------------------------------------
+    # STEP 1: Formatar Bloco de Escopo
+    # Responsabilidade: Verificar input e gerar HTML/Markdown específico
+    # ------------------------------------------------------------------
+    - id: fmt_scope
       shell: bash
       env:
+        RAW_SCOPE: ${{ inputs.body_scope }}
+      run: |
+        set -euo pipefail
+        
+        FORMATTED=""
+        if [ -n "$RAW_SCOPE" ]; then
+           # Usamos printf para evitar problemas de formatação
+           FORMATTED=$(printf "**Escopo:**\n%s\n" "$RAW_SCOPE")
+        fi
+
+        # Multiline output seguro
+        {
+          echo "block<<EOF"
+          echo "$FORMATTED"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # STEP 2: Formatar Bloco de TODO
+    # Responsabilidade: Isolar lógica de pendências
+    # ------------------------------------------------------------------
+    - id: fmt_todo
+      shell: bash
+      env:
+        RAW_TODO: ${{ inputs.body_todo }}
+      run: |
+        set -euo pipefail
+
+        FORMATTED=""
+        if [ -n "$RAW_TODO" ]; then
+           FORMATTED=$(printf "**Ações pendentes:**\n%s\n" "$RAW_TODO")
+        fi
+
+        {
+          echo "block<<EOF"
+          echo "$FORMATTED"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # STEP 3: Formatar Rodapé
+    # Responsabilidade: Lógica condicional complexa do rodapé
+    # ------------------------------------------------------------------
+    - id: fmt_footer
+      shell: bash
+      env:
+        RES: ${{ inputs.footer_result }}
+        ADV: ${{ inputs.footer_advise }}
+      run: |
+        set -euo pipefail
+
+        FORMATTED=""
+        # Concatena para verificar se algum existe
+        if [ -n "${RES}${ADV}" ]; then
+          FORMATTED="---"
+          
+          if [ -n "$RES" ]; then
+            FORMATTED="${FORMATTED}\nResultado: ${RES}"
+          fi
+          
+          if [ -n "$ADV" ]; then
+            FORMATTED="${FORMATTED}\nOrientação: ${ADV}"
+          fi
+        fi
+
+        {
+          echo "block<<EOF"
+          echo "$FORMATTED"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # STEP 4: Montar Markdown Final (Envsubst)
+    # Responsabilidade: Ler template e substituir variáveis preparadas
+    # ------------------------------------------------------------------
+    - id: assemble_markdown
+      shell: bash
+      env:
+        # Inputs diretos
         ACTOR: ${{ inputs.header_actor }}
         TITLE: ${{ inputs.header_title }}
         SUBJECT: ${{ inputs.header_subject }}
         BODY_MESSAGE: ${{ inputs.body_message }}
-        BODY_SCOPE: ${{ inputs.body_scope }}
-        BODY_TODO: ${{ inputs.body_todo }}
-        FOOTER_RESULT: ${{ inputs.footer_result }}
-        FOOTER_ADVISE: ${{ inputs.footer_advise }}
-        GITHUB_ACTION_PATH: ${{ github.action_path }}
+        # Inputs processados (outputs dos steps anteriores)
+        BODY_SCOPE_BLOCK: ${{ steps.fmt_scope.outputs.block }}
+        BODY_TODO_BLOCK: ${{ steps.fmt_todo.outputs.block }}
+        FOOTER_BLOCK: ${{ steps.fmt_footer.outputs.block }}
+        # Caminho
+        TEMPLATE_PATH: ${{ github.action_path }}/templates/pr-comment.md
       run: |
         set -euo pipefail
 
-        BODY_SCOPE_BLOCK=""
-        if [ -n "${BODY_SCOPE}" ]; then
-          BODY_SCOPE_BLOCK="**Escopo:**\n${BODY_SCOPE}\n"
+        if [ ! -f "$TEMPLATE_PATH" ]; then
+          echo "::error::Template file not found at $TEMPLATE_PATH"
+          exit 1
         fi
 
-        BODY_TODO_BLOCK=""
-        if [ -n "${BODY_TODO}" ]; then
-          BODY_TODO_BLOCK="**Ações pendentes:**\n${BODY_TODO}\n"
-        fi
-
-        FOOTER_BLOCK=""
-        if [ -n "${FOOTER_RESULT}${FOOTER_ADVISE}" ]; then
-          FOOTER_BLOCK="---"
-          if [ -n "${FOOTER_RESULT}" ]; then
-            FOOTER_BLOCK="${FOOTER_BLOCK}\nResultado: ${FOOTER_RESULT}"
-          fi
-          if [ -n "${FOOTER_ADVISE}" ]; then
-            FOOTER_BLOCK="${FOOTER_BLOCK}\nOrientação: ${FOOTER_ADVISE}"
-          fi
-        fi
-
+        # Export necessário para envsubst enxergar as variáveis
         export ACTOR TITLE SUBJECT BODY_MESSAGE BODY_SCOPE_BLOCK BODY_TODO_BLOCK FOOTER_BLOCK
 
-        COMMENT_BODY="$(envsubst < "$GITHUB_ACTION_PATH/templates/pr-comment.md")"
+        MARKDOWN_CONTENT=$(envsubst < "$TEMPLATE_PATH")
 
         {
-          printf 'comment_body<<EOF\n%s\nEOF\n' "$COMMENT_BODY"
+          echo "markdown<<EOF"
+          echo "$MARKDOWN_CONTENT"
+          echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
-    - id: post-comment
+    # ------------------------------------------------------------------
+    # STEP 5: Preparar Payload JSON
+    # Responsabilidade: Escapar JSON corretamente (usando jq para segurança)
+    # ------------------------------------------------------------------
+    - id: prepare_json
+      shell: bash
+      env:
+        CONTENT: ${{ steps.assemble_markdown.outputs.markdown }}
+      run: |
+        set -euo pipefail
+
+        # jq -R (raw input) -s (slurp) trata tudo como string única e escapa corretamente
+        JSON_PAYLOAD=$(printf '%s' "$CONTENT" | jq -Rs '{body: .}')
+
+        {
+          echo "payload<<EOF"
+          echo "$JSON_PAYLOAD"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # STEP 6: Executar Request (Curl)
+    # Responsabilidade: Apenas transporte de dados
+    # ------------------------------------------------------------------
+    - id: post_comment
       shell: bash
       env:
         TOKEN: ${{ inputs.token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ inputs.pr_number }}
-        COMMENT_BODY: ${{ steps.build-message.outputs.comment_body }}
+        PR_NUM: ${{ inputs.pr_number }}
+        JSON_DATA: ${{ steps.prepare_json.outputs.payload }}
       run: |
         set -euo pipefail
 
-        JSON_BODY="$(printf '%b' "$COMMENT_BODY" | jq -Rs '{body: .}')"
-
-        curl -sS \
+        URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
+        
+        echo "Posting comment to $URL..."
+        
+        HTTP_CODE=$(curl -sS -w "%{http_code}" -o response.json \
           -H "Authorization: Bearer $TOKEN" \
           -H "Accept: application/vnd.github+json" \
-          -X POST "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
-          -d "$JSON_BODY" || true
+          -X POST "$URL" \
+          -d "$JSON_DATA")
+
+        if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
+          echo "::error::Failed to post comment. HTTP Code: $HTTP_CODE"
+          cat response.json
+          exit 1
+        else
+          echo "Comment posted successfully (HTTP $HTTP_CODE)."
+        fi
