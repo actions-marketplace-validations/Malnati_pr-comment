@@ -115,4 +115,4 @@ comment_body: corpo final em Markdown, caso queira reutilizar em outro lugar.
 
 ## Versão
 
-Instale sempre com tag: `uses: Malnati/pr-comment@v2`
+Instale sempre com tag: `uses: Malnati/pr-comment@v4.0.2`
