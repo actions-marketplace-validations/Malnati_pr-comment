@@ -144,11 +144,8 @@ Todas as opções disponíveis para configuração.
 
 -----
 
-\<div align="center"\>
+<div align="center">
 
-\<sub\>Desenvolvido com 💜 por \<a href="https://github.com/Malnati"\>Ricardo Malnati\</a\>.\</sub\>
+<sub>Desenvolvido com 🤍 por <a href="https://github.com/Malnati">Ricardo Malnati</a>.</sub>
 
-\</div\>
-
-Gostaria de um exemplo de **arquivo `branding.svg`** (código para gerar a imagem de capa) ou prefere que eu ajuste o arquivo `action.yml` para garantir que as descrições lá batam exatamente com essa tabela nova?
-```
+</div>
