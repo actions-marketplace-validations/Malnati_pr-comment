@@ -1,6 +1,6 @@
-# Malnati/pr-comment@v5.0.1
+# Malnati/pr-comment@v6.0.0
 name: "PR Comment Template"
-description: "Post standard, templated comments on Pull Requests (header/body/footer)."
+description: "Post standard, templated comments on Pull Requests with Sticky mode support."
 author: "Ricardo Malnati"
 
 branding:
@@ -46,12 +46,17 @@ inputs:
     description: "Path to custom Markdown template"
     required: false
     default: ""
+  # NOVO INPUT
+  message_id:
+    description: "Unique ID (hidden) to enable Sticky Comments (Update existing instead of create new)"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
     # ------------------------------------------------------------------
-    # STEP 1: Validar Template (Logs apenas)
+    # STEP 1: Validar Template
     # ------------------------------------------------------------------
     - id: check_template
       shell: bash
@@ -67,7 +72,6 @@ runs:
           echo "Using default template."
         elif [ ! -f "$CUSTOM_PATH" ]; then
           echo "::warning title=Template Not Found::Arquivo '$CUSTOM_PATH' não encontrado. Usando padrão."
-          FINAL_TEMPLATE="$DEFAULT_PATH"
         else
           MISSING=()
           for VAR in "${REQUIRED_VARS[@]}"; do
@@ -79,34 +83,32 @@ runs:
           if [ ${#MISSING[@]} -gt 0 ]; then
             MISSING_STR=$(IFS=', '; echo "${MISSING[*]}")
             echo "::warning title=Invalid Template::Template inválido. Faltam: [$MISSING_STR]. Usando padrão."
-            FINAL_TEMPLATE="$DEFAULT_PATH"
           else
             echo "Template validado."
             FINAL_TEMPLATE="$CUSTOM_PATH"
           fi
         fi
         
-        # Output simples (single line) não precisa de heredoc
         echo "template_file=$FINAL_TEMPLATE" >> "$GITHUB_OUTPUT"
 
     # ------------------------------------------------------------------
-    # STEP 2: Montar Markdown Final (Usando DISCO em vez de Output)
+    # STEP 2: Montar Markdown e Injetar ID Oculto
     # ------------------------------------------------------------------
     - id: assemble_markdown
       shell: bash
       env:
-        # Inputs diretos (Eliminando steps intermediários)
+        # Inputs
         ACTOR: ${{ inputs.header_actor }}
         TITLE: ${{ inputs.header_title }}
         SUBJECT: ${{ inputs.header_subject }}
         BODY_MESSAGE: ${{ inputs.body_message }}
         RAW_SCOPE: ${{ inputs.body_scope }}
         RAW_TODO: ${{ inputs.body_todo }}
-        # Inputs para lógica do rodapé
         IN_RES: ${{ inputs.footer_result }}
         IN_ADV: ${{ inputs.footer_advise }}
-        # Caminho do template resolvido
         TEMPLATE_PATH: ${{ steps.check_template.outputs.template_file }}
+        # Novo Input
+        MSG_ID: ${{ inputs.message_id }}
       run: |
         set -euo pipefail
 
@@ -115,7 +117,7 @@ runs:
           exit 1
         fi
 
-        # 1. Lógica do Rodapé (Movida para cá para evitar step extra)
+        # 1. Rodapé
         FOOTER_BLOCK=""
         if [ -n "$IN_RES" ]; then
            FOOTER_BLOCK="$IN_RES"
@@ -128,57 +130,101 @@ runs:
            fi
         fi
 
-        # 2. Exportar variáveis para o envsubst
+        # 2. Exportar
         export ACTOR TITLE SUBJECT BODY_MESSAGE
         export BODY_SCOPE_BLOCK="$RAW_SCOPE"
         export BODY_TODO_BLOCK="$RAW_TODO"
         export FOOTER_BLOCK="$FOOTER_BLOCK"
 
-        # 3. Substituir e SALVAR EM DISCO (/tmp)
-        # Isso evita completamente erros de EOF ou caracteres especiais no GITHUB_OUTPUT
-        envsubst < "$TEMPLATE_PATH" > /tmp/final_message.md
-        
-        echo "Markdown gerado em /tmp/final_message.md"
+        # 3. Renderizar template temporário
+        envsubst < "$TEMPLATE_PATH" > /tmp/content_raw.md
+
+        # 4. Injetar ID Oculto (Se existir) no TOPO do arquivo final
+        if [ -n "$MSG_ID" ]; then
+           echo "" > /tmp/final_message.md
+           cat /tmp/content_raw.md >> /tmp/final_message.md
+           echo "Sticky ID '$MSG_ID' injetado no markdown."
+        else
+           mv /tmp/content_raw.md /tmp/final_message.md
+        fi
 
     # ------------------------------------------------------------------
-    # STEP 3: Preparar JSON (Lendo do DISCO)
+    # STEP 3: Decidir Ação (Create vs Update)
     # ------------------------------------------------------------------
-    - id: prepare_json
-      shell: bash
-      run: |
-        set -euo pipefail
-        
-        # Lê o arquivo do disco e usa jq para criar o JSON seguro
-        # jq --raw-input --slurp lê o arquivo todo como uma única string
-        jq --raw-input --slurp '{body: .}' /tmp/final_message.md > /tmp/payload.json
-        
-        echo "Payload JSON gerado em /tmp/payload.json"
-
-    # ------------------------------------------------------------------
-    # STEP 4: Request (Enviando arquivo)
-    # ------------------------------------------------------------------
-    - id: post_comment
+    - id: resolve_action
       shell: bash
       env:
         TOKEN: ${{ inputs.token }}
         REPO: ${{ github.repository }}
         PR_NUM: ${{ inputs.pr_number }}
+        MSG_ID: ${{ inputs.message_id }}
       run: |
         set -euo pipefail
-        URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
         
-        # Passamos o arquivo JSON direto pro Curl com @
+        # Default: Criar Novo
+        TARGET_URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
+        HTTP_METHOD="POST"
+        LOG_MSG="Criando novo comentário..."
+
+        # Se tiver ID, procura se já existe
+        if [ -n "$MSG_ID" ]; then
+           echo "Buscando comentário existente com ID: $MSG_ID..."
+           
+           # Busca comentários (limitado a 100 para performance)
+           # jq filtra procurando a string no body
+           EXISTING_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+             "https://api.github.com/repos/$REPO/issues/$PR_NUM/comments?per_page=100" \
+             | jq -r ".[] | select(.body | contains(\"\")) | .id" | head -n 1)
+
+           if [ -n "$EXISTING_ID" ] && [ "$EXISTING_ID" != "null" ]; then
+              # Se achou, muda para UPDATE (PATCH) na URL específica do comentário
+              TARGET_URL="https://api.github.com/repos/$REPO/issues/comments/$EXISTING_ID"
+              HTTP_METHOD="PATCH"
+              LOG_MSG="Atualizando comentário ID $EXISTING_ID..."
+           else
+              LOG_MSG="Comentário anterior não encontrado. Criando novo."
+           fi
+        fi
+
+        echo "url=$TARGET_URL" >> "$GITHUB_OUTPUT"
+        echo "method=$HTTP_METHOD" >> "$GITHUB_OUTPUT"
+        echo "log=$LOG_MSG" >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # STEP 4: Preparar JSON
+    # ------------------------------------------------------------------
+    - id: prepare_json
+      shell: bash
+      run: |
+        set -euo pipefail
+        jq --raw-input --slurp '{body: .}' /tmp/final_message.md > /tmp/payload.json
+
+    # ------------------------------------------------------------------
+    # STEP 5: Executar Request (Dinâmico)
+    # ------------------------------------------------------------------
+    - id: send_request
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        URL: ${{ steps.resolve_action.outputs.url }}
+        METHOD: ${{ steps.resolve_action.outputs.method }}
+        LOG: ${{ steps.resolve_action.outputs.log }}
+      run: |
+        set -euo pipefail
+        
+        echo "$LOG"
+        
         HTTP_CODE=$(curl -sS -w "%{http_code}" -o response.json \
           -H "Authorization: Bearer $TOKEN" \
           -H "Accept: application/vnd.github+json" \
           -H "Content-Type: application/json" \
-          -X POST "$URL" \
+          -X "$METHOD" "$URL" \
           -d @/tmp/payload.json)
 
         if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
-          echo "::error::Failed to post comment. HTTP Code: $HTTP_CODE"
+          echo "::error::Request Failed ($METHOD). HTTP Code: $HTTP_CODE"
           cat response.json
           exit 1
         else
-          echo "Comment posted successfully."
+          echo "Success! ($HTTP_CODE)"
         fi
