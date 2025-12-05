@@ -1,6 +1,6 @@
 # Malnati/pr-comment@v7.0.0
 name: "PR Comment Template"
-description: "Posta comentários padronizados e 'Sticky' em Pull Requests. Arquitetura modular v7."
+description: "Posta comentários padronizados e 'Sticky' em Pull Requests. Arquitetura modular v7 (File-based)."
 author: "Ricardo Malnati"
 
 branding:
@@ -9,57 +9,49 @@ branding:
 
 inputs:
   token:
-    description: "GitHub token."
+    description: "GitHub token (contents:read, pull-requests:write)."
     required: true
   pr_number:
-    description: "PR number."
+    description: "Pull Request number."
     required: true
-  # Template
+  
+  # Configuração do Template
   template_path:
-    description: "Caminho para arquivo de template Markdown."
-    required: false
-    default: ""
-  template_string:
-    description: "Conteúdo do template Markdown (String direta). Tem prioridade sobre path."
+    description: "Caminho relativo para o arquivo de template Markdown."
     required: false
     default: ""
   
-  # Sticky Mode
+  # Configuração Sticky
   message_id:
-    description: "ID único (invisível) para atualizar o mesmo comentário."
+    description: "ID único (invisível) para atualizar o mesmo comentário (Sticky Mode)."
     required: false
     default: ""
-  
-  # Variáveis de Substituição (Padrão)
+
+  # Variáveis de Substituição (Mapeadas para o Template)
   header_title:
-    description: "Título do comentário."
+    description: "Título do comentário (${TITLE})."
     required: false
     default: ""
   header_subject:
-    description: "Assunto/Subtítulo."
+    description: "Assunto/Subtítulo (${SUBJECT})."
     required: false
     default: ""
   header_actor:
-    description: "Autor da ação (ex: github-actions[bot])."
+    description: "Autor da ação (${ACTOR})."
     required: false
     default: ""
   body_message:
-    description: "Corpo principal da mensagem."
+    description: "Corpo principal da mensagem (${BODY_MESSAGE})."
     required: false
     default: ""
   footer_result:
-    description: "Resultado (ex: ✅ Sucesso)."
+    description: "Resultado (${FOOTER_RESULT})."
     required: false
     default: ""
   footer_advise:
-    description: "Conselho/Próximo passo."
+    description: "Conselho/Próximo passo (${FOOTER_ADVISE})."
     required: false
     default: ""
-  # Variáveis Extras (JSON)
-  variables:
-    description: "JSON string com variáveis extras para substituição no template."
-    required: false
-    default: "{}"
 
 runs:
   using: "composite"
@@ -67,18 +59,27 @@ runs:
     # ==================================================================
     # BLOCK 1: SETUP & VALIDATION
     # ==================================================================
+    
+    # 1.0 - Validação de Inputs Básicos
     - id: validate_inputs
       shell: bash
       env:
         TOKEN: ${{ inputs.token }}
         PR_NUM: ${{ inputs.pr_number }}
       run: |
-        echo "::group::🔧 Setup: Validation"
-        if [ -z "$TOKEN" ]; then echo "❌ Token missing."; exit 1; fi
-        if [ -z "$PR_NUM" ]; then echo "❌ PR Number missing."; exit 1; fi
-        echo "✅ Inputs Validated."
+        echo "::group::🔧 Setup: Input Validation"
+        if [ -z "$TOKEN" ]; then 
+           echo "❌ Error: Token is missing."
+           exit 1
+        fi
+        if [ -z "$PR_NUM" ]; then 
+           echo "❌ Error: PR Number is missing."
+           exit 1
+        fi
+        echo "✅ Inputs validated."
         echo "::endgroup::"
 
+    # 1.1 - Verificação de Permissões (Probe)
     - id: check_perms
       shell: bash
       env:
@@ -87,80 +88,83 @@ runs:
         PR_NUM: ${{ inputs.pr_number }}
       run: |
         echo "::group::🔐 Setup: Permissions Probe"
-        # Teste rápido de escrita (Tenta pegar a PR para ver se tem acesso)
-        # Usamos endpoint de comments com POST dummy ou GET para validar escopo
+        # Testa acesso de escrita (GET em endpoint de comments valida escopo)
         URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
+        
+        echo "📡 Probing API: $URL"
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$URL")
         
         if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "404" ]; then
-             echo "✅ API Access OK."
+             echo "✅ API Access OK (HTTP $HTTP_CODE)."
         else
-             echo "⚠️ API Access Warning (HTTP $HTTP_CODE). Check 'pull-requests: write'."
+             echo "⚠️ API Access Warning (HTTP $HTTP_CODE)."
+             echo "   Ensure the token has 'pull-requests: write'."
         fi
         echo "::endgroup::"
 
     # ==================================================================
-    # BLOCK 2: TEMPLATE ENGINE
+    # BLOCK 2: TEMPLATE ENGINE (FILE BASED)
     # ==================================================================
     
-    # 2.0 - Resolução da Fonte do Template
+    # 2.0 - Resolução do Arquivo de Template
     - id: resolve_template
       shell: bash
       env:
-        TPL_PATH: ${{ inputs.template_path }}
-        TPL_STR: ${{ inputs.template_string }}
+        CUSTOM_PATH: ${{ inputs.template_path }}
         DEFAULT_PATH: ${{ github.action_path }}/templates/pr-comment.md
       run: |
         echo "::group::📝 Template: Resolution"
-        TPL_FILE="/tmp/raw_template.md"
         
-        if [ -n "$TPL_STR" ]; then
-           echo "🔹 Using provided template string."
-           echo "$TPL_STR" > "$TPL_FILE"
-        elif [[ -n "$TPL_PATH" && -f "$TPL_PATH" ]]; then
-           echo "🔹 Using custom template file: $TPL_PATH"
-           cp "$TPL_PATH" "$TPL_FILE"
+        TARGET_FILE="/tmp/raw_template.md"
+        
+        if [[ -n "$CUSTOM_PATH" && -f "$CUSTOM_PATH" ]]; then
+           echo "🔹 Selected: Custom Template ($CUSTOM_PATH)"
+           cp "$CUSTOM_PATH" "$TARGET_FILE"
         else
-           echo "🔹 Using default built-in template."
-           cp "$DEFAULT_PATH" "$TPL_FILE"
+           echo "🔹 Selected: Default Template"
+           if [ ! -f "$DEFAULT_PATH" ]; then
+              echo "❌ Critical: Default template missing at $DEFAULT_PATH"
+              exit 1
+           fi
+           cp "$DEFAULT_PATH" "$TARGET_FILE"
         fi
         
-        echo "template_file=$TPL_FILE" >> "$GITHUB_OUTPUT"
+        echo "template_file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
 
-    # 2.1 - Renderização (Substituição de Variáveis)
+    # 2.1 - Renderização e Injeção de ID
     - id: render_template
       shell: bash
       env:
         TEMPLATE_FILE: ${{ steps.resolve_template.outputs.template_file }}
-        # Standard Vars
+        MSG_ID: ${{ inputs.message_id }}
+        # Variáveis para envsubst
         TITLE: ${{ inputs.header_title }}
         SUBJECT: ${{ inputs.header_subject }}
         ACTOR: ${{ inputs.header_actor }}
         BODY_MESSAGE: ${{ inputs.body_message }}
         FOOTER_RESULT: ${{ inputs.footer_result }}
         FOOTER_ADVISE: ${{ inputs.footer_advise }}
-        # Extra Vars
-        MSG_ID: ${{ inputs.message_id }}
       run: |
         echo "::group::🎨 Template: Rendering"
         
         FINAL_FILE="/tmp/final_comment.md"
         
-        # 1. Injeta ID Oculto (Sticky Mode) no topo, se existir
+        # 1. Injeta ID Oculto (Sticky) no topo
         if [ -n "$MSG_ID" ]; then
            echo "" > "$FINAL_FILE"
+           echo "✅ Sticky ID injected: $MSG_ID"
         else
            echo "" > "$FINAL_FILE"
         fi
         
-        # 2. Processa Envsubst (Standard Vars)
-        # Note: envsubst só substitui o que está exportado
+        # 2. Substituição de Variáveis
+        # Exporta explicitamente para o envsubst ver
         export TITLE SUBJECT ACTOR BODY_MESSAGE FOOTER_RESULT FOOTER_ADVISE
         
         envsubst < "$TEMPLATE_FILE" >> "$FINAL_FILE"
         
-        echo "✅ Render complete."
+        echo "✅ Markdown rendered successfully."
         echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
 
@@ -180,20 +184,22 @@ runs:
       run: |
         echo "::group::🕵️ Sticky Mode: Searching"
         
-        # Busca os primeiros 100 comentários
-        # Filtra usando jq para achar a string ""
-        SEARCH=""
+        SEARCH_STRING=""
+        API_URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments?per_page=100"
         
-        COMMENT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-          "https://api.github.com/repos/$REPO/issues/$PR_NUM/comments?per_page=100" \
-          | jq -r ".[] | select(.body | contains(\"$SEARCH\")) | .id" | head -n 1)
+        echo "🔍 Searching for ID in PR comments..."
+        
+        # Curl + JQ para filtrar pelo corpo do comentário
+        COMMENT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" "$API_URL" \
+          | jq -r ".[] | select(.body | contains(\"$SEARCH_STRING\")) | .id" \
+          | head -n 1)
         
         if [ -n "$COMMENT_ID" ] && [ "$COMMENT_ID" != "null" ]; then
            echo "✅ Found existing comment ID: $COMMENT_ID"
            echo "action=UPDATE" >> "$GITHUB_OUTPUT"
            echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
         else
-           echo "⚪ No existing comment found. Creating new."
+           echo "⚪ No match found. Creating new."
            echo "action=CREATE" >> "$GITHUB_OUTPUT"
         fi
         echo "::endgroup::"
@@ -207,6 +213,7 @@ runs:
         ACTION: ${{ steps.find_comment.outputs.action }}
         COMMENT_ID: ${{ steps.find_comment.outputs.comment_id }}
       run: |
+        # Define URL e Método baseado na busca anterior
         if [ "$ACTION" == "UPDATE" ]; then
            URL="https://api.github.com/repos/$REPO/issues/comments/$COMMENT_ID"
            METHOD="PATCH"
@@ -214,6 +221,7 @@ runs:
            URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
            METHOD="POST"
         fi
+        
         echo "url=$URL" >> "$GITHUB_OUTPUT"
         echo "method=$METHOD" >> "$GITHUB_OUTPUT"
 
@@ -221,15 +229,19 @@ runs:
     # BLOCK 4: API EXECUTION
     # ==================================================================
 
-    # 4.0 - Payload JSON
+    # 4.0 - Preparação do Payload
     - id: prepare_payload
       shell: bash
       env:
         FILE: ${{ steps.render_template.outputs.final_file }}
       run: |
+        echo "::group::📦 Payload: Packaging"
+        # Converte o arquivo Markdown renderizado para JSON field 'body'
         jq --raw-input --slurp '{body: .}' "$FILE" > /tmp/payload.json
+        echo "✅ Payload created at /tmp/payload.json"
+        echo "::endgroup::"
 
-    # 4.1 - Request
+    # 4.1 - Envio da Requisição
     - id: send_request
       shell: bash
       env:
@@ -237,7 +249,9 @@ runs:
         URL: ${{ steps.target_setup.outputs.url }}
         METHOD: ${{ steps.target_setup.outputs.method }}
       run: |
-        echo "::group::📡 API: Sending Comment ($METHOD)"
+        echo "::group::📡 API: Sending Comment"
+        echo "Method: $METHOD"
+        echo "Target: $URL"
         
         HTTP_CODE=$(curl -sS -w "%{http_code}" -o response.json \
           -H "Authorization: Bearer $TOKEN" \
