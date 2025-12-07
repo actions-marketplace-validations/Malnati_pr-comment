@@ -151,19 +151,11 @@ runs:
         TEMPLATE_FILE: ${{ steps.resolve_template.outputs.template_file }}
         MSG_ID: ${{ inputs.message_id }}
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
-        # Variáveis para envsubst
-        TITLE: ${{ inputs.header_title }}
-        SUBJECT: ${{ inputs.header_subject }}
-        ACTOR: ${{ inputs.header_actor }}
-        BODY_MESSAGE: ${{ inputs.body_message }}
-        FOOTER_RESULT: ${{ inputs.footer_result }}
-        FOOTER_ADVISE: ${{ inputs.footer_advise }}
       run: |
         echo "::group::🎨 Template: Rendering"
         
         FINAL_FILE="/tmp/final_comment.md"
         
-        # 1. Injeta ID Oculto (Sticky) no topo
         if [ -n "$MSG_ID" ]; then
            echo "" > "$FINAL_FILE"
            echo "✅ Sticky ID injected: $MSG_ID"
@@ -172,7 +164,7 @@ runs:
         fi
 
         if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "ℹ️ Raw mode habilitado: usando body_message como corpo completo do comentário."
+           echo "ℹ️ Raw mode habilitado: usando BODY_MESSAGE como corpo completo do comentário."
            printf '%s\n' "$BODY_MESSAGE" >> "$FINAL_FILE"
            echo "✅ Raw comment rendered successfully (no template)."
            echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
@@ -180,7 +172,6 @@ runs:
            exit 0
         fi
         
-        # 2. Substituição de Variáveis
         export TITLE SUBJECT ACTOR BODY_MESSAGE FOOTER_RESULT FOOTER_ADVISE
         
         envsubst < "$TEMPLATE_FILE" >> "$FINAL_FILE"
@@ -188,7 +179,7 @@ runs:
         echo "✅ Markdown rendered successfully."
         echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
-
+        
     # ==================================================================
     # BLOCK 3: COMMENT MANAGEMENT (STICKY LOGIC)
     # ==================================================================
