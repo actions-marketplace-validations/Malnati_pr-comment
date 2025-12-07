@@ -1,6 +1,6 @@
-# Malnati/pr-comment@v7.1.0
+# Malnati/pr-comment@v8.0.0
 name: "PR Comment Pro"
-description: "Posta comentários padronizados e 'Sticky' em Pull Requests com ou sem template. Malnati/pr-comment@v7.1.0"
+description: "Posta comentários padronizados e 'Sticky' em Pull Requests com ou sem template. Malnati/pr-comment@v8.0.0"
 author: "Ricardo Malnati"
 
 branding:
@@ -15,56 +15,28 @@ inputs:
     description: "Pull Request number."
     required: true
   
-  # Configuração do Template
   template_path:
     description: "Caminho relativo para o arquivo de template Markdown."
     required: false
     default: ""
 
   use_raw_body:
-    description: "Se 'true', ignora templates e usa o texto cru do body_message."
+    description: "Se 'true', ignora templates e usa o texto cru da variável de ambiente BODY_MESSAGE."
     required: false
     default: "false"
   
-  # Configuração Sticky
   message_id:
     description: "ID único (invisível) para atualizar o mesmo comentário (Sticky Mode)."
-    required: false
-    default: ""
-
-  # Variáveis de Substituição (Mapeadas para o Template)
-  header_title:
-    description: "Título do comentário (${TITLE})."
-    required: false
-    default: ""
-  header_subject:
-    description: "Assunto/Subtítulo (${SUBJECT})."
-    required: false
-    default: ""
-  header_actor:
-    description: "Autor da ação (${ACTOR})."
-    required: false
-    default: ""
-  body_message:
-    description: "Corpo principal da mensagem (${BODY_MESSAGE})."
-    required: false
-    default: ""
-  footer_result:
-    description: "Resultado (${FOOTER_RESULT})."
-    required: false
-    default: ""
-  footer_advise:
-    description: "Conselho/Próximo passo (${FOOTER_ADVISE})."
     required: false
     default: ""
 
 runs:
   using: "composite"
   steps:
+  
     # ==================================================================
     # BLOCK 1: SETUP & VALIDATION
     # ==================================================================
-    
     # 1.0 - Validação de Inputs Básicos
     - id: validate_inputs
       shell: bash
@@ -73,11 +45,7 @@ runs:
         PR_NUM: ${{ inputs.pr_number }}
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
         TEMPLATE_PATH: ${{ inputs.template_path }}
-        HEADER_TITLE: ${{ inputs.header_title }}
-        HEADER_SUBJECT: ${{ inputs.header_subject }}
-        HEADER_ACTOR: ${{ inputs.header_actor }}
-        FOOTER_RESULT: ${{ inputs.footer_result }}
-        FOOTER_ADVISE: ${{ inputs.footer_advise }}
+        BODY_MESSAGE: ${{ env.BODY_MESSAGE }}
       run: |
         echo "::group::🔧 Setup: Input Validation"
         if [ -z "$TOKEN" ]; then 
@@ -88,32 +56,37 @@ runs:
            echo "❌ Error: PR Number is missing."
            exit 1
         fi
-
         if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "::warning::Flag 'use_raw_body' habilitada: alguns inputs baseados em template serão ignorados."
+           if [ -z "$BODY_MESSAGE" ]; then
+             echo "❌ Error: use_raw_body=true, mas a variável de ambiente BODY_MESSAGE está vazia ou não foi definida."
+             exit 1
+           fi
+           echo "::warning::Flag 'use_raw_body' habilitada: o template será ignorado e o comentário usará apenas a variável de ambiente BODY_MESSAGE."
            if [ -n "$TEMPLATE_PATH" ]; then
              echo "::notice::Input 'template_path' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
            fi
-           if [ -n "$HEADER_TITLE" ]; then
-             echo "::notice::Input 'header_title' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$HEADER_SUBJECT" ]; then
-             echo "::notice::Input 'header_subject' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$HEADER_ACTOR" ]; then
-             echo "::notice::Input 'header_actor' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$FOOTER_RESULT" ]; then
-             echo "::notice::Input 'footer_result' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$FOOTER_ADVISE" ]; then
-             echo "::notice::Input 'footer_advise' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
         fi
-
+        if [ -n "$TEMPLATE_PATH" ] && [ -f "$TEMPLATE_PATH" ]; then
+          VARS_IN_TEMPLATE=$(grep -o '\${[A-Za-z_][A-Za-z0-9_]*}' "$TEMPLATE_PATH" | sed 's/[${}]//g' | sort -u | tr '\n' ' ')
+          echo "::warning::Template com variáveis para envsubst detectado."
+          echo "────────────────────────────────────────────────────────────"
+          echo "Para passar variáveis para a Action, use algo semelhante a:"
+          echo ""
+          echo "  variables: |"
+          echo "            {"
+          echo "              \"VAR1\": \"...\""
+          echo "            }"
+          echo ""
+          if [ -n "$VARS_IN_TEMPLATE" ]; then
+            echo "Variáveis presentes: $VARS_IN_TEMPLATE"
+          else
+            echo "Nenhuma variável \${VAR} detectada no template informado."
+          fi
+          echo "────────────────────────────────────────────────────────────"
+        fi
         echo "✅ Inputs validated."
         echo "::endgroup::"
-
+        
     # 1.1 - Verificação de Permissões (Probe)
     - id: check_perms
       shell: bash
@@ -125,10 +98,8 @@ runs:
         echo "::group::🔐 Setup: Permissions Probe"
         # Testa acesso de escrita (GET em endpoint de comments valida escopo)
         URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
-        
         echo "📡 Probing API: $URL"
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$URL")
-        
         if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "404" ]; then
              echo "✅ API Access OK (HTTP $HTTP_CODE)."
         else
@@ -140,7 +111,6 @@ runs:
     # ==================================================================
     # BLOCK 2: TEMPLATE ENGINE (FILE BASED)
     # ==================================================================
-    
     # 2.0 - Resolução do Arquivo de Template
     - id: resolve_template
       shell: bash
@@ -150,11 +120,9 @@ runs:
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
       run: |
         echo "::group::📝 Template: Resolution"
-        
         TARGET_FILE="/tmp/raw_template.md"
-
         if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "🔹 Raw mode ativo: ignorando templates e usando body_message como corpo do comentário.";
+           echo "🔹 Raw mode ativo: ignorando templates e usando BODY_MESSAGE como corpo do comentário.";
            : > "$TARGET_FILE"
         else
            if [[ -n "$CUSTOM_PATH" && -f "$CUSTOM_PATH" ]]; then
@@ -169,7 +137,6 @@ runs:
               cp "$DEFAULT_PATH" "$TARGET_FILE"
            fi
         fi
-        
         echo "template_file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
 
@@ -180,48 +147,31 @@ runs:
         TEMPLATE_FILE: ${{ steps.resolve_template.outputs.template_file }}
         MSG_ID: ${{ inputs.message_id }}
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
-        # Variáveis para envsubst
-        TITLE: ${{ inputs.header_title }}
-        SUBJECT: ${{ inputs.header_subject }}
-        ACTOR: ${{ inputs.header_actor }}
-        BODY_MESSAGE: ${{ inputs.body_message }}
-        FOOTER_RESULT: ${{ inputs.footer_result }}
-        FOOTER_ADVISE: ${{ inputs.footer_advise }}
       run: |
         echo "::group::🎨 Template: Rendering"
-        
         FINAL_FILE="/tmp/final_comment.md"
-        
-        # 1. Injeta ID Oculto (Sticky) no topo
         if [ -n "$MSG_ID" ]; then
-           echo "" > "$FINAL_FILE"
+           echo "<!-- pr-comment-id:$MSG_ID -->" > "$FINAL_FILE"
            echo "✅ Sticky ID injected: $MSG_ID"
         else
-           echo "" > "$FINAL_FILE"
+           : > "$FINAL_FILE"
         fi
-
         if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "ℹ️ Raw mode habilitado: usando body_message como corpo completo do comentário."
+           echo "ℹ️ Raw mode habilitado: usando BODY_MESSAGE como corpo completo do comentário."
            printf '%s\n' "$BODY_MESSAGE" >> "$FINAL_FILE"
            echo "✅ Raw comment rendered successfully (no template)."
            echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
            echo "::endgroup::"
            exit 0
         fi
-        
-        # 2. Substituição de Variáveis
-        export TITLE SUBJECT ACTOR BODY_MESSAGE FOOTER_RESULT FOOTER_ADVISE
-        
         envsubst < "$TEMPLATE_FILE" >> "$FINAL_FILE"
-        
         echo "✅ Markdown rendered successfully."
         echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
-
+        
     # ==================================================================
     # BLOCK 3: COMMENT MANAGEMENT (STICKY LOGIC)
     # ==================================================================
-
     # 3.0 - Busca de Comentário Existente
     - id: find_comment
       if: inputs.message_id != ''
@@ -233,17 +183,12 @@ runs:
         MSG_ID: ${{ inputs.message_id }}
       run: |
         echo "::group::🕵️ Sticky Mode: Searching"
-        
-        SEARCH_STRING=""
+        SEARCH_STRING="pr-comment-id:$MSG_ID"
         API_URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments?per_page=100"
-        
         echo "🔍 Searching for ID in PR comments..."
-        
-        # Curl + JQ para filtrar pelo corpo do comentário
         COMMENT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" "$API_URL" \
           | jq -r ".[] | select(.body | contains(\"$SEARCH_STRING\")) | .id" \
           | head -n 1)
-        
         if [ -n "$COMMENT_ID" ] && [ "$COMMENT_ID" != "null" ]; then
            echo "✅ Found existing comment ID: $COMMENT_ID"
            echo "action=UPDATE" >> "$GITHUB_OUTPUT"
@@ -271,14 +216,12 @@ runs:
            URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
            METHOD="POST"
         fi
-        
         echo "url=$URL" >> "$GITHUB_OUTPUT"
         echo "method=$METHOD" >> "$GITHUB_OUTPUT"
 
     # ==================================================================
     # BLOCK 4: API EXECUTION
     # ==================================================================
-
     # 4.0 - Preparação do Payload
     - id: prepare_payload
       shell: bash
@@ -302,14 +245,12 @@ runs:
         echo "::group::📡 API: Sending Comment"
         echo "Method: $METHOD"
         echo "Target: $URL"
-        
         HTTP_CODE=$(curl -sS -w "%{http_code}" -o response.json \
           -H "Authorization: Bearer $TOKEN" \
           -H "Accept: application/vnd.github+json" \
           -H "Content-Type: application/json" \
           -X "$METHOD" "$URL" \
           -d @/tmp/payload.json)
-
         if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
           echo "❌ Request Failed ($HTTP_CODE)"
           cat response.json
