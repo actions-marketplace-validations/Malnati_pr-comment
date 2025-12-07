@@ -45,11 +45,6 @@ runs:
         PR_NUM: ${{ inputs.pr_number }}
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
         TEMPLATE_PATH: ${{ inputs.template_path }}
-        HEADER_TITLE: ${{ inputs.header_title }}
-        HEADER_SUBJECT: ${{ inputs.header_subject }}
-        HEADER_ACTOR: ${{ inputs.header_actor }}
-        FOOTER_RESULT: ${{ inputs.footer_result }}
-        FOOTER_ADVISE: ${{ inputs.footer_advise }}
       run: |
         echo "::group::🔧 Setup: Input Validation"
         if [ -z "$TOKEN" ]; then 
@@ -62,30 +57,34 @@ runs:
         fi
 
         if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "::warning::Flag 'use_raw_body' habilitada: alguns inputs baseados em template serão ignorados."
+           echo "::warning::Flag 'use_raw_body' habilitada: o template será ignorado e o comentário usará apenas a variável de ambiente BODY_MESSAGE."
            if [ -n "$TEMPLATE_PATH" ]; then
              echo "::notice::Input 'template_path' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
            fi
-           if [ -n "$HEADER_TITLE" ]; then
-             echo "::notice::Input 'header_title' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$HEADER_SUBJECT" ]; then
-             echo "::notice::Input 'header_subject' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$HEADER_ACTOR" ]; then
-             echo "::notice::Input 'header_actor' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$FOOTER_RESULT" ]; then
-             echo "::notice::Input 'footer_result' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
-           if [ -n "$FOOTER_ADVISE" ]; then
-             echo "::notice::Input 'footer_advise' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
+        fi
+
+        if [ -n "$TEMPLATE_PATH" ] && [ -f "$TEMPLATE_PATH" ]; then
+          VARS_IN_TEMPLATE=$(grep -o '\${[A-Za-z_][A-Za-z0-9_]*}' "$TEMPLATE_PATH" | sed 's/[${}]//g' | sort -u | tr '\n' ' ')
+          echo "::warning::Template com variáveis para envsubst detectado."
+          echo "────────────────────────────────────────────────────────────"
+          echo "Para passar variáveis para a Action, use algo semelhante a:"
+          echo ""
+          echo "  variables: |"
+          echo "            {"
+          echo "              \"VAR1\": \"...\""
+          echo "            }"
+          echo ""
+          if [ -n "$VARS_IN_TEMPLATE" ]; then
+            echo "Variáveis presentes: $VARS_IN_TEMPLATE"
+          else
+            echo "Nenhuma variável \${VAR} detectada no template informado."
+          fi
+          echo "────────────────────────────────────────────────────────────"
         fi
 
         echo "✅ Inputs validated."
         echo "::endgroup::"
-
+        
     # 1.1 - Verificação de Permissões (Probe)
     - id: check_perms
       shell: bash
