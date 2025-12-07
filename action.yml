@@ -15,46 +15,18 @@ inputs:
     description: "Pull Request number."
     required: true
   
-  # Configuração do Template
   template_path:
     description: "Caminho relativo para o arquivo de template Markdown."
     required: false
     default: ""
 
   use_raw_body:
-    description: "Se 'true', ignora templates e usa o texto cru do body_message."
+    description: "Se 'true', ignora templates e usa o texto cru da variável de ambiente BODY_MESSAGE."
     required: false
     default: "false"
   
-  # Configuração Sticky
   message_id:
     description: "ID único (invisível) para atualizar o mesmo comentário (Sticky Mode)."
-    required: false
-    default: ""
-
-  # Variáveis de Substituição (Mapeadas para o Template)
-  header_title:
-    description: "Título do comentário (${TITLE})."
-    required: false
-    default: ""
-  header_subject:
-    description: "Assunto/Subtítulo (${SUBJECT})."
-    required: false
-    default: ""
-  header_actor:
-    description: "Autor da ação (${ACTOR})."
-    required: false
-    default: ""
-  body_message:
-    description: "Corpo principal da mensagem (${BODY_MESSAGE})."
-    required: false
-    default: ""
-  footer_result:
-    description: "Resultado (${FOOTER_RESULT})."
-    required: false
-    default: ""
-  footer_advise:
-    description: "Conselho/Próximo passo (${FOOTER_ADVISE})."
     required: false
     default: ""
 
