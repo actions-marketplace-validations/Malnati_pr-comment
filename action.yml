@@ -1,6 +1,6 @@
-# Malnati/pr-comment@v8.0.0
+# Malnati/pr-comment@v8.0.1
 name: "PR Comment Pro"
-description: "Posta comentários padronizados e 'Sticky' em Pull Requests com ou sem template. Malnati/pr-comment@v8.0.0"
+description: "Posta comentários padronizados e 'Sticky' em Pull Requests a partir de arquivos de conteúdo. Malnati/pr-comment@v8.0.1"
 author: "Ricardo Malnati"
 
 branding:
@@ -16,12 +16,12 @@ inputs:
     required: true
   
   template_path:
-    description: "Caminho relativo para o arquivo de template Markdown."
-    required: false
+    description: "Caminho do arquivo de conteúdo Markdown a ser publicado (já renderizado externamente)."
+    required: true
     default: ""
 
   use_raw_body:
-    description: "Se 'true', ignora templates e usa o texto cru da variável de ambiente BODY_MESSAGE."
+    description: "Campo mantido por compatibilidade, atualmente ignorado. Conteúdo é sempre lido de arquivo."
     required: false
     default: "false"
   
@@ -56,33 +56,13 @@ runs:
            echo "❌ Error: PR Number is missing."
            exit 1
         fi
-        if [ "$USE_RAW_BODY" = "true" ]; then
-           if [ -z "$BODY_MESSAGE" ]; then
-             echo "❌ Error: use_raw_body=true, mas a variável de ambiente BODY_MESSAGE está vazia ou não foi definida."
-             exit 1
-           fi
-           echo "::warning::Flag 'use_raw_body' habilitada: o template será ignorado e o comentário usará apenas a variável de ambiente BODY_MESSAGE."
-           if [ -n "$TEMPLATE_PATH" ]; then
-             echo "::notice::Input 'template_path' informado, mas será ignorado porque use_raw_body=true. Remova a flag para usar substituições via template."
-           fi
+        if [ -z "$TEMPLATE_PATH" ]; then
+           echo "❌ Error: template_path is missing."
+           exit 1
         fi
-        if [ -n "$TEMPLATE_PATH" ] && [ -f "$TEMPLATE_PATH" ]; then
-          VARS_IN_TEMPLATE=$(grep -o '\${[A-Za-z_][A-Za-z0-9_]*}' "$TEMPLATE_PATH" | sed 's/[${}]//g' | sort -u | tr '\n' ' ')
-          echo "::warning::Template com variáveis para envsubst detectado."
-          echo "────────────────────────────────────────────────────────────"
-          echo "Para passar variáveis para a Action, use algo semelhante a:"
-          echo ""
-          echo "  variables: |"
-          echo "            {"
-          echo "              \"VAR1\": \"...\""
-          echo "            }"
-          echo ""
-          if [ -n "$VARS_IN_TEMPLATE" ]; then
-            echo "Variáveis presentes: $VARS_IN_TEMPLATE"
-          else
-            echo "Nenhuma variável \${VAR} detectada no template informado."
-          fi
-          echo "────────────────────────────────────────────────────────────"
+        if [ ! -f "$TEMPLATE_PATH" ]; then
+           echo "❌ Error: file not found at template_path: $TEMPLATE_PATH"
+           exit 1
         fi
         echo "✅ Inputs validated."
         echo "::endgroup::"
@@ -120,23 +100,7 @@ runs:
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
       run: |
         echo "::group::📝 Template: Resolution"
-        TARGET_FILE="/tmp/raw_template.md"
-        if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "🔹 Raw mode ativo: ignorando templates e usando BODY_MESSAGE como corpo do comentário.";
-           : > "$TARGET_FILE"
-        else
-           if [[ -n "$CUSTOM_PATH" && -f "$CUSTOM_PATH" ]]; then
-              echo "🔹 Selected: Custom Template ($CUSTOM_PATH)"
-              cp "$CUSTOM_PATH" "$TARGET_FILE"
-           else
-              echo "🔹 Selected: Default Template"
-              if [ ! -f "$DEFAULT_PATH" ]; then
-                 echo "❌ Critical: Default template missing at $DEFAULT_PATH"
-                 exit 1
-              fi
-              cp "$DEFAULT_PATH" "$TARGET_FILE"
-           fi
-        fi
+        TARGET_FILE="$CUSTOM_PATH"
         echo "template_file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
 
@@ -156,15 +120,7 @@ runs:
         else
            : > "$FINAL_FILE"
         fi
-        if [ "$USE_RAW_BODY" = "true" ]; then
-           echo "ℹ️ Raw mode habilitado: usando BODY_MESSAGE como corpo completo do comentário."
-           printf '%s\n' "$BODY_MESSAGE" >> "$FINAL_FILE"
-           echo "✅ Raw comment rendered successfully (no template)."
-           echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
-           echo "::endgroup::"
-           exit 0
-        fi
-        envsubst < "$TEMPLATE_FILE" >> "$FINAL_FILE"
+        cat "$TEMPLATE_FILE" >> "$FINAL_FILE"
         echo "✅ Markdown rendered successfully."
         echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
