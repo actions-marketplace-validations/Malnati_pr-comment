@@ -34,7 +34,7 @@ runs:
   using: "composite"
   steps:
   
-    - name: "Validação de Inputs Básicos"
+    - name: "🔧 Validação de Inputs Básicos"
       id: validate_inputs
       shell: bash
       env:
@@ -44,7 +44,6 @@ runs:
         TEMPLATE_PATH: ${{ inputs.template_path }}
         BODY_MESSAGE: ${{ env.BODY_MESSAGE }}
       run: |
-        echo "::group::🔧 Setup: Input Validation"
         if [ -z "$TOKEN" ]; then 
            echo "❌ Error: Token is missing."
            exit 1
@@ -64,7 +63,7 @@ runs:
         echo "✅ Inputs validated."
         echo "::endgroup::"
         
-    - name: "Verificação de Permissões (Probe)"
+    - name: "🔐 Verificação de Permissões (Probe)"
       id: check_perms
       shell: bash
       env:
@@ -72,10 +71,7 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUM: ${{ inputs.pr_number }}
       run: |
-        echo "::group::🔐 Setup: Permissions Probe"
-        # Testa acesso de escrita (GET em endpoint de comments valida escopo)
         URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments"
-        echo "📡 Probing API: $URL"
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$URL")
         if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "404" ]; then
              echo "✅ API Access OK (HTTP $HTTP_CODE)."
@@ -93,7 +89,6 @@ runs:
         MSG_ID: ${{ inputs.message_id }}
         USE_RAW_BODY: ${{ inputs.use_raw_body }}
       run: |
-        echo "::group::🎨 Template: Rendering"
         FINAL_FILE="/tmp/final_comment.md"
         if [ -n "$MSG_ID" ]; then
            echo "<!-- pr-comment-id:$MSG_ID -->" > "$FINAL_FILE"
@@ -106,7 +101,7 @@ runs:
         echo "final_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
         echo "::endgroup::"
         
-    - name: "🔎 Busca de Comentário Existente"
+    - name: "🔎 Sticky de Comentário Existente"
       id: find_comment
       if: inputs.message_id != ''
       shell: bash
@@ -116,7 +111,6 @@ runs:
         PR_NUM: ${{ inputs.pr_number }}
         MSG_ID: ${{ inputs.message_id }}
       run: |
-        echo "::group::🕵️ Sticky Mode: Searching"
         SEARCH_STRING="pr-comment-id:$MSG_ID"
         API_URL="https://api.github.com/repos/$REPO/issues/$PR_NUM/comments?per_page=100"
         echo "🔍 Searching for ID in PR comments..."
@@ -133,7 +127,7 @@ runs:
         fi
         echo "::endgroup::"
 
-    - name: "Define URL e Método ISSUE/PR baseado na busca anterior"
+    - name: "🎯 Define URL e Método ISSUE/PR baseado na busca anterior"
       id: target_setup
       shell: bash
       env:
