@@ -1,20 +1,21 @@
 <!-- README.md -->
-# pr-comment
+# PR Comment Pro
 
 <div align="center">
 
-# 💬 PR Comment Template
+# 💬 PR Comment Pro
 
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-PR%20Comment%20Template-6f42c1?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/pr-comment-template)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-PR%20Comment%20Pro-6f42c1?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/pr-comment-pro)
 [![Version](https://img.shields.io/github/v/release/Malnati/pr-comment?style=for-the-badge&color=purple)](https://github.com/Malnati/pr-comment/releases)
 [![License](https://img.shields.io/github/license/Malnati/pr-comment?style=for-the-badge&color=blue)](LICENSE)
 
-**Padronize, Automatize e Embeleze o feedback dos seus Pull Requests.**
+**Standardize, Automate, and Beautify your Pull Request feedback with flexible templates and sticky comments.**
 
 <p align="center">
-  <a href="#-recursos">Recursos</a> •
-  <a href="#-uso-básico">Uso Básico</a> •
-  <a href="#-uso-avançado-templates-customizados">Templates Customizados</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-usage-examples">Usage Examples</a> •
+  <a href="#-template-engine">Template Engine</a> •
   <a href="#-inputs">Inputs</a>
 </p>
 
@@ -22,130 +23,714 @@
 
 ---
 
-## 🚀 Sobre
+## 🚀 About
 
-O **PR Comment Template** é uma GitHub Action projetada para equipes que valorizam a comunicação clara. Ela permite postar comentários estruturados (Header, Body, Footer) automaticamente em seus PRs, garantindo que informações cruciais sobre deploys, testes e validações não se percam.
+**PR Comment Pro v8.0.0** is a powerful GitHub Action that posts standardized comments on Pull Requests with advanced template support and "sticky" comment functionality. Unlike previous versions, it now uses a flexible variable substitution system with `envsubst`, allowing for unlimited custom variables in your templates.
 
-### ✨ Recursos Principais
+### ✨ Key Features
 
-* **Padronização:** Garanta que todo PR tenha o mesmo formato de feedback.
-* **Flexibilidade:** Use o template padrão moderno ou traga seu próprio **Markdown**.
-* **Validação:** O sistema verifica se o seu template personalizado contém as variáveis necessárias.
-* **Separação de Contexto:** Áreas dedicadas para Mensagem, Escopo (mudanças) e TODOs.
+* **🎨 Flexible Template Engine**: Use any Markdown template with `${VARIABLE}` substitution
+* **📌 Sticky Comments**: Update existing comments instead of creating new ones
+* **📝 Raw Mode**: Post direct text without templates when needed
+* **🔧 Variable Injection**: Unlimited custom variables via environment or JSON
+* **⚡ Performance**: Composite action architecture for faster execution
+* **🔒 Validation**: Automatic template and permission validation
 
 ---
 
-## 📦 Uso Básico
+## 📦 Quick Start
 
-Ideal para quem quer começar rápido usando o visual padrão (tema roxo/clean).
+### Basic Usage with Default Template
+
+```yaml
+name: Post PR Comment
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Post PR Comment
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+```
+
+### Using Custom Template with Variables
 
 ```yaml
 steps:
-  - name: Post Standard Comment
-    uses: Malnati/pr-comment@v4.0.2
+  - name: Post Custom Comment
+    uses: Malnati/pr-comment@v8.0.0
     with:
       token: ${{ secrets.GITHUB_TOKEN }}
       pr_number: ${{ github.event.pull_request.number }}
-      header_actor: ${{ github.actor }}
-      header_title: "🧪 Testing default PR message"
-      header_subject: "Sincronização de Branches"
-      body_message: "A sincronização foi realizada com sucesso pelo bot."
-      body_scope: |
-        - Base: `main`
-        - Head: `develop`
-      footer_result: "Sucesso"
-````
+      template_path: ".github/templates/review.md"
+    env:
+      PR_TITLE: "${{ github.event.pull_request.title }}"
+      PR_AUTHOR: "@${{ github.event.pull_request.user.login }}"
+      REVIEW_STATUS: "Pending"
+      REVIEW_DATE: "$(date +'%Y-%m-%d')"
+```
 
------
+---
 
-## 🎨 Uso Avançado: Templates Customizados
+## 📚 Usage Examples
 
-Você pode injetar seu próprio arquivo Markdown para ter controle total sobre o layout, emojis e estrutura.
+### Example 1: Basic Usage with Variables
 
-### 1\. Crie seu Template
+```yaml
+name: Automated PR Notification
+on:
+  pull_request:
+    types: [opened]
 
-Adicione um arquivo no seu repositório (ex: `.github/templates/custom.md`). Você **deve** incluir as variáveis abaixo:
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Post Welcome Comment
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          template_path: ".github/templates/welcome.md"
+        env:
+          PR_TITLE: "${{ github.event.pull_request.title }}"
+          PR_AUTHOR: "@${{ github.event.pull_request.user.login }}"
+          BRANCH_NAME: "${{ github.event.pull_request.head.ref }}"
+          BASE_BRANCH: "${{ github.event.pull_request.base.ref }}"
+          CREATED_AT: "${{ github.event.pull_request.created_at }}"
+          CHANGED_FILES: "${{ github.event.pull_request.changed_files }}"
+```
 
-| Variável | Descrição |
-| :--- | :--- |
-| `$ACTOR` | O usuário que disparou a action (ex: github.actor) |
-| `$SUBJECT` | O assunto do comentário |
-| `$BODY_MESSAGE` | A mensagem principal |
-| `$BODY_SCOPE_BLOCK` | Lista de escopo formatada |
-| `$BODY_TODO_BLOCK` | Lista de pendências formatada |
-| `$FOOTER_BLOCK` | O rodapé com resultados |
+**Template `.github/templates/welcome.md`:**
+```markdown
+# 👋 Welcome to PR #${PR_NUMBER}
 
-**Exemplo de arquivo `custom.md`:**
+**Title:** ${PR_TITLE}  
+**Author:** ${PR_AUTHOR}  
+**Branch:** ${BRANCH_NAME} → ${BASE_BRANCH}  
+**Created:** ${CREATED_AT}
+
+## 🎯 What happens next?
+
+1. **Automated Checks** will run within a few minutes
+2. **Reviewers** will be automatically assigned
+3. **CI/CD Pipeline** will validate your changes
+
+## 📊 Quick Stats
+- **Files Changed:** ${CHANGED_FILES}
+- **Additions:** ${ADDITIONS}
+- **Deletions:** ${DELETIONS}
+
+---
+
+*This comment was automatically generated by PR Comment Pro*
+```
+
+### Example 2: Sticky Comments for Status Updates
+
+```yaml
+name: CI/CD Status Updates
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+
+jobs:
+  update-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update PR Status
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.client_payload.pr_number }}
+          template_path: ".github/templates/ci-status.md"
+          message_id: "ci-status-${{ github.event.client_payload.pr_number }}"
+        env:
+          WORKFLOW_NAME: "${{ github.event.workflow_run.name }}"
+          WORKFLOW_STATUS: "${{ github.event.workflow_run.conclusion }}"
+          RUN_NUMBER: "${{ github.event.workflow_run.run_number }}"
+          RUN_URL: "${{ github.event.workflow_run.html_url }}"
+          COMMIT_SHA: "${{ github.event.workflow_run.head_sha }}"
+          DURATION: "${{ fromJSON(format('{{\"seconds\":\"{0}\"}}', github.event.workflow_run.updated_at - github.event.workflow_run.run_started_at)).seconds }}s"
+          TIMESTAMP: "$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+```
+
+### Example 3: Raw Mode (No Template)
+
+```yaml
+name: Direct Message Post
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  label-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Custom Message
+        run: |
+          MESSAGE=$(cat << EOF
+          ## 🏷️ Label Added: ${{ github.event.label.name }}
+          
+          **Action:** Label applied to PR #${{ github.event.pull_request.number }}
+          **By:** @${{ github.actor }}
+          **Time:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ### Next Steps:
+          1. Review the label context
+          2. Update documentation if needed
+          3. Notify relevant team members
+          
+          ---
+          *Automated notification*
+          EOF
+          )
+          echo "BODY_MESSAGE<<EOF" >> $GITHUB_ENV
+          echo "$MESSAGE" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+      - name: Post Raw Message
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          use_raw_body: "true"
+        env:
+          BODY_MESSAGE: ${{ env.BODY_MESSAGE }}
+```
+
+### Example 4: JSON Variables Format
+
+```yaml
+name: Quality Gate with JSON Variables
+on:
+  pull_request:
+    types: [synchronize]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Run Quality Checks
+        id: quality
+        run: |
+          # Simulate quality checks
+          echo 'variables={"CODE_COVERAGE":"92","TEST_PASS_RATE":"98","LINT_SCORE":"95","SECURITY_SCORE":"100","COMPLEXITY_SCORE":"7.2","MAINTAINABILITY_INDEX":"85"}' >> $GITHUB_OUTPUT
+          
+      - name: Post Quality Report
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          template_path: ".github/templates/quality-gate.md"
+          message_id: "quality-report-${{ github.event.pull_request.number }}"
+        env:
+          PR_TITLE: "${{ github.event.pull_request.title }}"
+          PR_AUTHOR: "@${{ github.event.pull_request.user.login }}"
+          variables: ${{ steps.quality.outputs.variables }}
+```
+
+### Example 5: Deployment Summary with Multiple Variables
+
+```yaml
+name: Deployment Summary
+on:
+  deployment_status:
+
+jobs:
+  deploy-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Deployment Summary
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.deployment.payload.pull_request.number }}
+          template_path: ".github/templates/deployment.md"
+        env:
+          variables: |
+            {
+              "ENVIRONMENT": "${{ github.event.deployment.environment }}",
+              "DEPLOYMENT_STATUS": "${{ github.event.deployment_status.state }}",
+              "TARGET_SHA": "${{ github.event.deployment.sha }}",
+              "DEPLOYMENT_ID": "${{ github.event.deployment.id }}",
+              "CREATED_AT": "${{ github.event.deployment.created_at }}",
+              "DEPLOYER": "@${{ github.event.deployment.creator.login }}",
+              "DEPLOYMENT_URL": "${{ github.event.deployment_status.target_url }}",
+              "TIMESTAMP": "$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            }
+```
+
+**Template `.github/templates/deployment.md`:**
+```markdown
+# 🚀 Deployment to ${ENVIRONMENT}
+
+**Status:** ${DEPLOYMENT_STATUS}  
+**Deployed by:** ${DEPLOYER}  
+**Deployment ID:** ${DEPLOYMENT_ID}  
+**Timestamp:** ${TIMESTAMP}
+
+## 📋 Deployment Details
+- **Environment:** ${ENVIRONMENT}
+- **Target SHA:** ${TARGET_SHA:0:8}
+- **Created:** ${CREATED_AT}
+- **PR:** #${PR_NUMBER}
+
+## 🔗 Links
+- [Deployment Logs](${DEPLOYMENT_URL})
+- [Commit Details](https://github.com/${GITHUB_REPOSITORY}/commit/${TARGET_SHA})
+- [PR #${PR_NUMBER}](https://github.com/${GITHUB_REPOSITORY}/pull/${PR_NUMBER})
+
+## 📊 Health Check
+- [ ] Services responsive
+- [ ] Metrics normal
+- [ ] Error rates low
+- [ ] Performance optimal
+
+---
+
+*Last updated: ${TIMESTAMP} | PR Comment Pro v8.0.0*
+```
+
+### Example 6: Code Review Template with Conditional Logic
+
+```yaml
+name: Automated Code Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Run Analysis
+        id: analysis
+        run: |
+          echo "CODE_COVERAGE=88" >> $GITHUB_ENV
+          echo "LINT_ISSUES=3" >> $GITHUB_ENV
+          echo "SECURITY_ISSUES=0" >> $GITHUB_ENV
+          echo "COMPLEXITY_SCORE=6.7" >> $GITHUB_ENV
+          
+      - name: Post Review
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          template_path: ".github/templates/code-review.md"
+        env:
+          PR_TITLE: "${{ github.event.pull_request.title }}"
+          PR_AUTHOR: "@${{ github.event.pull_request.user.login }}"
+          BRANCH: "${{ github.event.pull_request.head.ref }}"
+          CHANGED_FILES: "${{ github.event.pull_request.changed_files }}"
+          CODE_COVERAGE: "${{ env.CODE_COVERAGE }}"
+          LINT_ISSUES: "${{ env.LINT_ISSUES }}"
+          SECURITY_ISSUES: "${{ env.SECURITY_ISSUES }}"
+          COMPLEXITY_SCORE: "${{ env.COMPLEXITY_SCORE }}"
+          REVIEW_DATE: "$(date +'%Y-%m-%d')"
+          COVERAGE_STATUS: "${{ env.CODE_COVERAGE >= 80 && '✅' || '❌' }}"
+          SECURITY_STATUS: "${{ env.SECURITY_ISSUES == 0 && '✅' || '❌' }}"
+          LINT_STATUS: "${{ env.LINT_ISSUES <= 5 && '✅' || '⚠️' }}"
+```
+
+### Example 7: Error Reporting with Sticky Updates
+
+```yaml
+name: Error Monitoring
+on:
+  workflow_run:
+    workflows: ["Build"]
+    types:
+      - completed
+
+jobs:
+  error-report:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Error Report
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ fromJson(github.event.workflow_run.head_commit.message).pr_number }}
+          template_path: ".github/templates/error-report.md"
+          message_id: "error-${{ github.event.workflow_run.id }}"
+        env:
+          variables: |
+            {
+              "WORKFLOW_NAME": "${{ github.event.workflow_run.name }}",
+              "RUN_NUMBER": "${{ github.event.workflow_run.run_number }}",
+              "RUN_ID": "${{ github.event.workflow_run.id }}",
+              "FAILED_AT": "${{ github.event.workflow_run.updated_at }}",
+              "RUN_URL": "${{ github.event.workflow_run.html_url }}",
+              "COMMIT_SHA": "${{ github.event.workflow_run.head_sha }}",
+              "ACTOR": "@${{ github.event.workflow_run.actor.login }}",
+              "ERROR_SEVERITY": "High",
+              "TIMESTAMP": "$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            }
+```
+
+### Example 8: Custom Template with All GitHub Context
+
+```yaml
+name: Full Context Template
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  review-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Review Notification
+        uses: Malnati/pr-comment@v8.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          template_path: ".github/templates/review-notification.md"
+        env:
+          variables: |
+            {
+              "REVIEWER": "@${{ github.event.review.user.login }}",
+              "REVIEW_STATE": "${{ github.event.review.state }}",
+              "REVIEW_SUBMITTED_AT": "${{ github.event.review.submitted_at }}",
+              "REVIEW_BODY": "${{ github.event.review.body }}",
+              "PR_TITLE": "${{ github.event.pull_request.title }}",
+              "PR_AUTHOR": "@${{ github.event.pull_request.user.login }}",
+              "PR_NUMBER": "${{ github.event.pull_request.number }}",
+              "REPOSITORY": "${{ github.repository }}",
+              "EVENT_NAME": "${{ github.event_name }}",
+              "ACTOR": "@${{ github.actor }}",
+              "SHA": "${{ github.sha }}",
+              "REF": "${{ github.ref }}",
+              "WORKFLOW": "${{ github.workflow }}",
+              "RUN_ID": "${{ github.run_id }}",
+              "RUN_NUMBER": "${{ github.run_number }}",
+              "TIMESTAMP": "$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            }
+```
+
+---
+
+## 🎨 Template Engine
+
+### Variable Syntax
+
+The action uses `envsubst` for variable substitution. Use `${VARIABLE_NAME}` syntax in your templates:
 
 ```markdown
-# 🎨 Report de Deploy
-**Autor:** @$ACTOR | **Ação:** $SUBJECT
+# ${PR_TITLE}
 
-> $BODY_MESSAGE
+**Author:** ${PR_AUTHOR}  
+**Branch:** ${BRANCH_NAME}  
+**Status:** ${REVIEW_STATUS}
 
-<details open>
-<summary>📂 Escopo da mudança</summary>
-$BODY_SCOPE_BLOCK
-</details>
+${CUSTOM_MESSAGE}
 
 ---
-$FOOTER_BLOCK
+*Generated on ${TIMESTAMP}*
 ```
 
-### 2\. Configure o Workflow
+### Passing Variables
 
-É necessário usar o `actions/checkout` para que a Action consiga ler seu arquivo de template local.
+You can pass variables in three ways:
+
+**1. Individual Environment Variables:**
+```yaml
+env:
+  PR_TITLE: "My Pull Request"
+  PR_AUTHOR: "@username"
+  STATUS: "Pending"
+```
+
+**2. JSON Object via `variables`:**
+```yaml
+env:
+  variables: |
+    {
+      "PR_TITLE": "My Pull Request",
+      "PR_AUTHOR": "@username",
+      "STATUS": "Pending"
+    }
+```
+
+**3. Mixed Approach:**
+```yaml
+env:
+  PR_TITLE: "My Pull Request"
+  variables: |
+    {
+      "PR_AUTHOR": "@username",
+      "STATUS": "Pending"
+    }
+```
+
+### Default Variables
+
+The action automatically provides these context variables:
+
+```bash
+# GitHub Context
+GITHUB_REPOSITORY
+GITHUB_SHA
+GITHUB_REF
+GITHUB_ACTOR
+GITHUB_EVENT_NAME
+GITHUB_WORKFLOW
+GITHUB_RUN_ID
+GITHUB_RUN_NUMBER
+
+# Action Inputs (converted to uppercase)
+PR_NUMBER
+TEMPLATE_PATH
+MESSAGE_ID
+USE_RAW_BODY
+```
+
+### Template Validation
+
+The action validates your template and shows detected variables:
+
+```bash
+Template with variables for envsubst detected.
+────────────────────────────────────────────────────────────
+To pass variables to the Action, use something similar to:
+
+  variables: |
+            {
+              "VAR1": "..."
+            }
+
+Detected variables: PR_TITLE PR_AUTHOR STATUS TIMESTAMP
+────────────────────────────────────────────────────────────
+```
+
+---
+
+## 🔧 Advanced Features
+
+### Sticky Comments
+
+Use `message_id` to create/update the same comment:
 
 ```yaml
-steps:
-  - name: Checkout Repository
-    uses: actions/checkout@v4
-
-  - name: Post Custom Comment
-    uses: Malnati/pr-comment@v4.0.2
-    with:
-      token: ${{ secrets.GITHUB_TOKEN }}
-      pr_number: ${{ github.event.pull_request.number }}
-      header_actor: ${{ github.actor }}
-      header_title: "🚀 Deploy Staging"
-      header_subject: "Deploy Automático"
-      body_message: "O ambiente de staging foi atualizado."
-      body_scope: "- Versão: v1.2.0"
-      
-      # Caminho relativo para seu arquivo
-      template_path: ".github/templates/custom.md"
+with:
+  message_id: "deployment-status-pr-42"
 ```
 
------
+**How it works:**
+1. First run: Creates comment with `<!-- pr-comment-id:deployment-status-pr-42 -->`
+2. Subsequent runs: Finds and updates the same comment
+3. Perfect for: Status updates, progress trackers, dynamic reports
+
+### Raw Mode
+
+Bypass templates entirely:
+
+```yaml
+with:
+  use_raw_body: "true"
+env:
+  BODY_MESSAGE: "Your raw Markdown content here"
+```
+
+### Default Template
+
+If no `template_path` is provided, uses `/templates/pr-comment.md`:
+
+```markdown
+## 🤖 Automated Comment
+
+This comment was automatically generated by **PR Comment Pro**.
+
+**Action:** ${GITHUB_WORKFLOW}
+**Triggered by:** @${GITHUB_ACTOR}
+**Event:** ${GITHUB_EVENT_NAME}
+**Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+---
+
+*To customize this message, provide a custom template using the `template_path` input.*
+```
+
+---
 
 ## ⚙️ Inputs
 
-Todas as opções disponíveis para configuração.
-
-| Input | Obrigatório | Tipo | Padrão | Descrição |
-| :--- | :---: | :---: | :---: | :--- |
-| `token` | **Sim** | Secret | - | Token do GitHub (ex: `secrets.GITHUB_TOKEN`). |
-| `pr_number` | **Sim** | Int | - | Número do PR onde o comentário será feito. |
-| `header_actor` | **Sim** | String | - | Nome do usuário ou bot autor da mensagem. |
-| `header_title` | **Sim** | String | - | Título grande do comentário. |
-| `header_subject` | **Sim** | String | - | Subtítulo ou assunto específico. |
-| `body_message` | **Sim** | Markdown | - | Corpo principal da mensagem. |
-| `body_scope` | Não | Markdown | `""` | Lista de itens afetados ou escopo. |
-| `body_todo` | Não | Markdown | `""` | Lista de ações pendentes (checkboxes/bullets). |
-| `footer_result` | Não | String | `""` | Resumo final (ex: "Sucesso", "Falha"). |
-| `footer_advise` | Não | String | `""` | Conselho ou próximo passo. |
-| `template_path` | Não | String | `""` | Caminho relativo para um arquivo `.md` personalizado. |
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `token` | ✅ Yes | - | GitHub token with `contents:read` and `pull-requests:write` permissions |
+| `pr_number` | ✅ Yes | - | Pull Request number to comment on |
+| `template_path` | ❌ No | `""` | Relative path to custom Markdown template file |
+| `use_raw_body` | ❌ No | `"false"` | If `"true"`, ignores templates and uses `BODY_MESSAGE` environment variable |
+| `message_id` | ❌ No | `""` | Unique ID for sticky comments (updates same comment instead of creating new) |
 
 ## 📤 Outputs
 
-| Output | Descrição |
-| :--- | :--- |
-| `comment_body` | O conteúdo final em Markdown processado. Útil se você quiser enviar o mesmo texto para Slack/Teams em steps seguintes. |
+| Output | Description |
+|--------|-------------|
+| `comment_body` | The final processed Markdown content |
 
------
+---
+
+## 🔒 Permissions
+
+Required permissions in your workflow:
+
+```yaml
+permissions:
+  contents: read    # To read template files
+  pull-requests: write  # To post/update comments
+```
+
+Or using the token directly:
+```yaml
+with:
+  token: ${{ secrets.GITHUB_TOKEN }}  # Must have required scopes
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **"Template file not found"**
+   - Ensure `actions/checkout@v4` runs before this action
+   - Verify the path is correct relative to repository root
+
+2. **"BODY_MESSAGE is empty"**
+   - When using `use_raw_body="true"`, you must set `BODY_MESSAGE` environment variable
+
+3. **Variables not substituted**
+   - Ensure variables are passed via `env`
+   - Check variable names match `${VAR_NAME}` in template
+   - Variables are case-sensitive
+
+4. **Permission errors**
+   - Token needs `pull-requests:write` scope
+   - Check workflow permissions
+
+5. **Sticky comments not updating**
+   - Ensure same `message_id` is used
+   - Check API rate limits
+
+### Debug Mode
+
+Enable detailed logging:
+
+```yaml
+env:
+  ACTIONS_STEP_DEBUG: true
+  ACTIONS_RUNNER_DEBUG: true
+```
+
+---
+
+## 📋 Best Practices
+
+1. **Use Sticky IDs for Dynamic Content**
+   ```yaml
+   message_id: "ci-status-${{ github.event.pull_request.number }}"
+   ```
+
+2. **Version Control Your Templates**
+   ```bash
+   .github/templates/
+   ├── welcome.md
+   ├── code-review.md
+   ├── deployment.md
+   └── error-report.md
+   ```
+
+3. **Validate Templates Locally**
+   ```bash
+   # Check for undefined variables
+   envsubst -v < template.md
+   ```
+
+4. **Use JSON for Complex Data**
+   ```yaml
+   env:
+     variables: |
+       {
+         "METRICS": "{\"coverage\": 92, \"issues\": 3}",
+         "TAGS": "[\"backend\", \"api\", \"security\"]"
+       }
+   ```
+
+5. **Handle Special Characters**
+   ```yaml
+   env:
+     MULTILINE_TEXT: "First line\nSecond line\nThird line"
+     JSON_SAFE: "${{ toJson(vars) }}"
+   ```
+
+---
+
+## 🔄 Migration from v4.x to v8.0.0
+
+**Breaking Changes:**
+- Removed fixed variables (`$ACTOR`, `$SUBJECT`, etc.)
+- Now uses `${VAR_NAME}` syntax with `envsubst`
+- No automatic validation of specific variables
+
+**Migration Example:**
+
+**Before (v4.x):**
+```markdown
+# $TITLE
+**By:** $ACTOR
+$BODY_MESSAGE
+```
+
+**After (v8.0.0):**
+```markdown
+# ${PR_TITLE}
+**By:** ${GITHUB_ACTOR}
+${BODY_CONTENT}
+```
+
+```yaml
+env:
+  PR_TITLE: "${{ github.event.pull_request.title }}"
+  GITHUB_ACTOR: "@${{ github.actor }}"
+  BODY_CONTENT: "Your message here"
+```
+
+---
+
+## 📚 Additional Resources
+
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [envsubst Manual](https://linux.die.net/man/1/envsubst)
+- [GitHub REST API - Issues/Comments](https://docs.github.com/en/rest/issues/comments)
+
+---
 
 <div align="center">
 
-<sub>Desenvolvido com 🤍 por <a href="https://github.com/Malnati">Ricardo Malnati</a>.</sub>
+<sub>Built with 🤍 by <a href="https://github.com/Malnati">Ricardo Malnati</a></sub><br>
+<sub>Version 8.0.0 • Modern template engine with flexible variable substitution</sub>
 
 </div>
